@@ -110,6 +110,31 @@ func parseFlags() *stage1commontypes.RuntimePod {
 	return &rp
 }
 
+// writeEnv writes the environment to the env file for subsequent rkt enter
+func writeEnv(env []string, envFilePath string) error {
+	var err error
+	envDir := filepath.Dir(envFilePath)
+	if err = os.MkdirAll(envDir, 0755); err != nil {
+		log.PrintE(fmt.Sprintf("can't mkdir %s", envDir), err)
+		return err
+	}
+
+	var envFile *os.File
+	if envFile, err = os.Create(envFilePath); err != nil {
+		log.PrintE(fmt.Sprintf("can't create %s", envFilePath), err)
+		return err
+	}
+	defer envFile.Close()
+	for _, e := range env {
+		_, err = fmt.Fprintf(envFile, "%s\n", e)
+		if err != nil {
+			log.PrintE(fmt.Sprintf("can't write to %s", envFilePath), err)
+			return err
+		}
+	}
+	return nil
+}
+
 func addMountPoints(namedVolumeMounts map[types.ACName]volumeMountTuple, mountpoints []types.MountPoint) error {
 	for _, mp := range mountpoints {
 		tuple, exists := namedVolumeMounts[mp.Name]
@@ -291,9 +316,16 @@ func stage1(rp *stage1commontypes.RuntimePod) int {
 		workDir = ra.App.WorkingDirectory
 	}
 
-	env := []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+	var env []string
+	havePath := false // to avoid duplicating PATH in env
 	for _, e := range ra.App.Environment {
 		env = append(env, e.Name+"="+e.Value)
+		if e.Name == "PATH" {
+			havePath = true
+		}
+	}
+	if !havePath {
+		env = append(env, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
 	}
 
 	rfs := filepath.Join(common.AppPath(p.Root, ra.Name), "rootfs")
@@ -486,6 +518,11 @@ func stage1(rp *stage1commontypes.RuntimePod) int {
 
 	if _, gid, err = gidResolver.IDs(); err != nil {
 		log.PrintE(fmt.Sprintf("failed to configure group %q", ra.App.Group), err)
+		return 254
+	}
+
+	if err = writeEnv(env, stage1initcommon.EnvFilePath(p.Root, ra.Name)); err != nil {
+		log.PrintE("can't write env", err)
 		return 254
 	}
 
