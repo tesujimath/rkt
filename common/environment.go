@@ -15,9 +15,12 @@
 package common
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"os"
+	"path/filepath"
 
 	"github.com/rkt/rkt/pkg/user"
 
@@ -36,7 +39,8 @@ var defaultEnv = map[string]string{
 
 // WriteEnvFile creates an environment file for given app name, the minimum
 // required environment variables by the appc spec will be set to sensible
-// defaults here if they're not provided by env.
+// defaults here if they're not provided by env.  The containing directory
+// and its ancestors will be created if necessary.
 func WriteEnvFile(env types.Environment, uidRange *user.UidRange, envFilePath string) error {
 	ef := bytes.Buffer{}
 
@@ -50,6 +54,10 @@ func WriteEnvFile(env types.Environment, uidRange *user.UidRange, envFilePath st
 		fmt.Fprintf(&ef, "%s=%s\n", e.Name, e.Value)
 	}
 
+	if err := os.MkdirAll(filepath.Dir(envFilePath), 0755); err != nil {
+		return err
+	}
+
 	if err := ioutil.WriteFile(envFilePath, ef.Bytes(), 0644); err != nil {
 		return err
 	}
@@ -59,4 +67,35 @@ func WriteEnvFile(env types.Environment, uidRange *user.UidRange, envFilePath st
 	}
 
 	return nil
+}
+
+// ReadEnvFileAsComposed reads the environment file, returning it as a
+// slice of strings, each expected but not checked to be of the form
+// "key=value".
+func ReadEnvFileAsComposed(envFilePath string) ([]string, error) {
+	var env []string
+	var envFile *os.File
+	var err error
+	if envFile, err = os.Open(envFilePath); err != nil {
+		return nil, err
+	}
+	defer envFile.Close()
+	scanner := bufio.NewScanner(envFile)
+	for scanner.Scan() {
+		env = append(env, scanner.Text())
+	}
+	if err = scanner.Err(); err != nil {
+		return nil, err
+	}
+	return env, nil
+}
+
+// ComposeEnviron formats the environment into a slice of strings,
+// each of the form "key=value".
+func ComposeEnviron(env types.Environment) []string {
+	var composed []string
+	for _, e := range env {
+		composed = append(composed, fmt.Sprintf("%s=%s\n", e.Name, e.Value))
+	}
+	return composed
 }

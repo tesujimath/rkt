@@ -15,7 +15,6 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -23,6 +22,7 @@ import (
 	"syscall"
 
 	"github.com/appc/spec/schema/types"
+	"github.com/rkt/rkt/common"
 	rktlog "github.com/rkt/rkt/pkg/log"
 	stage1initcommon "github.com/rkt/rkt/stage1/init/common"
 )
@@ -50,27 +50,6 @@ func getRootDir(pid string) (string, error) {
 	return os.Readlink(rootLink)
 }
 
-// readEnv reads the environment from the env file written by stage1 run
-func readEnv() ([]string, error) {
-	var env []string
-	cwd, err := os.Getwd()
-	if err != nil {
-		return env, err
-	}
-	envFilePath := stage1initcommon.EnvFilePath(cwd, types.ACName(appName))
-	var envFile *os.File
-	if envFile, err = os.Open(envFilePath); err != nil {
-		return env, err
-	}
-	defer envFile.Close()
-	scanner := bufio.NewScanner(envFile)
-	for scanner.Scan() {
-		env = append(env, scanner.Text())
-	}
-	err = scanner.Err()
-	return env, err
-}
-
 func execArgs(envv []string) error {
 	argv0 := flag.Arg(0)
 	argv := flag.Args()
@@ -93,7 +72,12 @@ func main() {
 		log.FatalE("Failed to get pod root", err)
 	}
 
-	env, err := readEnv()
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.FatalE("Failed to get cwd", err)
+	}
+
+	env, err := common.ReadEnvFileAsComposed(stage1initcommon.EnvFilePath(cwd, types.ACName(appName)))
 	if err != nil {
 		log.FatalE("Failed to read app env", err)
 	}
