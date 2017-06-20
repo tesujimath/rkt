@@ -291,11 +291,6 @@ func stage1(rp *stage1commontypes.RuntimePod) int {
 		workDir = ra.App.WorkingDirectory
 	}
 
-	env := []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
-	for _, e := range ra.App.Environment {
-		env = append(env, e.Name+"="+e.Value)
-	}
-
 	rfs := filepath.Join(common.AppPath(p.Root, ra.Name), "rootfs")
 
 	argFlyMounts, err := evaluateMounts(rfs, string(ra.Name), p)
@@ -489,6 +484,11 @@ func stage1(rp *stage1commontypes.RuntimePod) int {
 		return 254
 	}
 
+	if err = common.WriteEnvFile(ra.App.Environment, user.NewBlankUidRange(), stage1initcommon.EnvFilePath(p.Root, ra.Name)); err != nil {
+		log.PrintE("can't write env", err)
+		return 254
+	}
+
 	diag.Printf("chroot to %q", rfs)
 	if err := syscall.Chroot(rfs); err != nil {
 		log.PrintE("can't chroot", err)
@@ -523,7 +523,7 @@ func stage1(rp *stage1commontypes.RuntimePod) int {
 	}
 
 	diag.Printf("execing %q in %q", args, rfs)
-	if err = syscall.Exec(args[0], args, env); err != nil {
+	if err = syscall.Exec(args[0], args, common.ComposeEnviron(ra.App.Environment)); err != nil {
 		log.PrintE(fmt.Sprintf("can't execute %q", args[0]), err)
 		return 254
 	}

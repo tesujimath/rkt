@@ -21,7 +21,10 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/appc/spec/schema/types"
+	"github.com/rkt/rkt/common"
 	rktlog "github.com/rkt/rkt/pkg/log"
+	stage1initcommon "github.com/rkt/rkt/stage1/init/common"
 )
 
 var (
@@ -36,7 +39,7 @@ var (
 func init() {
 	flag.BoolVar(&debug, "debug", false, "Run in debug mode")
 	flag.StringVar(&podPid, "pid", "", "Pod PID")
-	flag.StringVar(&appName, "appname", "", "Application (Ignored in rkt fly)")
+	flag.StringVar(&appName, "appname", "", "Application name")
 
 	log, diag, _ = rktlog.NewLogSet("fly-enter", false)
 }
@@ -47,10 +50,9 @@ func getRootDir(pid string) (string, error) {
 	return os.Readlink(rootLink)
 }
 
-func execArgs() error {
+func execArgs(envv []string) error {
 	argv0 := flag.Arg(0)
 	argv := flag.Args()
-	envv := []string{}
 
 	return syscall.Exec(argv0, argv, envv)
 }
@@ -70,6 +72,16 @@ func main() {
 		log.FatalE("Failed to get pod root", err)
 	}
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.FatalE("Failed to get cwd", err)
+	}
+
+	env, err := common.ReadEnvFileAsComposed(stage1initcommon.EnvFilePath(cwd, types.ACName(appName)))
+	if err != nil {
+		log.FatalE("Failed to read app env", err)
+	}
+
 	if err := os.Chdir(root); err != nil {
 		log.FatalE("Failed to change to new root", err)
 	}
@@ -82,7 +94,7 @@ func main() {
 	diag.Println("APP:", appName)
 	diag.Println("ARGS:", flag.Args())
 
-	if err := execArgs(); err != nil {
+	if err := execArgs(env); err != nil {
 		log.PrintE("exec failed", err)
 	}
 
