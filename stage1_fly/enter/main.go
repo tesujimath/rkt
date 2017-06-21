@@ -15,16 +15,24 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"syscall"
 
+	"github.com/appc/spec/schema"
 	"github.com/appc/spec/schema/types"
+	"github.com/hashicorp/errwrap"
 	"github.com/rkt/rkt/common"
 	rktlog "github.com/rkt/rkt/pkg/log"
 	stage1initcommon "github.com/rkt/rkt/stage1/init/common"
+	"github.com/rkt/rkt/stage1_fly"
+)
+
+const (
+	flavor = "fly"
 )
 
 var (
@@ -48,6 +56,33 @@ func getRootDir(pid string) (string, error) {
 	rootLink := fmt.Sprintf("/proc/%s/root", pid)
 
 	return os.Readlink(rootLink)
+}
+
+func getPodManifest() (*schema.PodManifest, error) {
+	f, err := os.Open("pod")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	pmb, err := ioutil.ReadAll(f)
+
+	if err != nil {
+		return nil, errwrap.Wrap(errors.New("error reading pod manifest"), err)
+	}
+	pm := &schema.PodManifest{}
+	if err = pm.UnmarshalJSON(pmb); err != nil {
+		return nil, errwrap.Wrap(errors.New("invalid pod manifest"), err)
+	}
+	return pm, nil
+}
+
+func getRuntimeApp(pm *schema.PodManifest) (*schema.RuntimeApp, error) {
+	if len(pm.Apps) != 1 {
+		return nil, fmt.Errorf("flavor %q only supports 1 application per Pod for now", flavor)
+	}
+
+	return &pm.Apps[0], nil
 }
 
 func execArgs(envv []string) error {
@@ -82,12 +117,31 @@ func main() {
 		log.FatalE("Failed to read app env", err)
 	}
 
+	pm, err := getPodManifest()
+	if err != nil {
+		log.FatalE("Failed to get pod manifest", err)
+	}
+
+	ra, err := getRuntimeApp(pm)
+	if err != nil {
+		log.FatalE("Failed to get app", err)
+	}
+
+	credentials, err := stage1_fly.LookupProcessCredentials(ra, root)
+	if err != nil {
+		log.FatalE("failed to lookup process credentials", err)
+	}
+
 	if err := os.Chdir(root); err != nil {
 		log.FatalE("Failed to change to new root", err)
 	}
 
 	if err := syscall.Chroot(root); err != nil {
 		log.FatalE("Failed to chroot", err)
+	}
+
+	if err := stage1_fly.SetProcessCredentials(credentials, diag); err != nil {
+		log.FatalE("can't set process credentials", err)
 	}
 
 	diag.Println("PID:", podPid)
