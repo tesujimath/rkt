@@ -35,6 +35,7 @@ import (
 	rktlog "github.com/rkt/rkt/pkg/log"
 	"github.com/rkt/rkt/pkg/mountinfo"
 	"github.com/rkt/rkt/pkg/sys"
+	"github.com/rkt/rkt/pkg/user"
 	stage1common "github.com/rkt/rkt/stage1/common"
 	stage1commontypes "github.com/rkt/rkt/stage1/common/types"
 	stage1initcommon "github.com/rkt/rkt/stage1/init/common"
