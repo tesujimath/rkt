@@ -95,7 +95,7 @@ func ReadEnvFileAsComposed(envFilePath string) ([]string, error) {
 func ComposeEnviron(env types.Environment) []string {
 	var composed []string
 	for _, e := range env {
-		composed = append(composed, fmt.Sprintf("%s=%s\n", e.Name, e.Value))
+		composed = append(composed, fmt.Sprintf("%s=%s", e.Name, e.Value))
 	}
 	return composed
 }
