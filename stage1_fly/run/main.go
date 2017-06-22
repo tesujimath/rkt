@@ -448,7 +448,7 @@ func stage1(rp *stage1commontypes.RuntimePod) int {
 		return 254
 	}
 
-	credentials, err := stage1_fly.LookupProcessCredentials(&ra, rfs)
+	credentials, err := stage1_fly.LookupProcessCredentials(p, &ra, rfs)
 	if err != nil {
 		log.PrintE("failed to lookup process credentials", err)
 		return 254
@@ -470,7 +470,8 @@ func stage1(rp *stage1commontypes.RuntimePod) int {
 		return 254
 	}
 
-	if err := stage1_fly.SetProcessCredentials(credentials, diag); err != nil {
+	diag.Printf("setting credentials: %+v", credentials)
+	if err := stage1_fly.SetProcessCredentials(credentials); err != nil {
 		log.PrintE("can't set process credentials", err)
 		return 254
 	}
